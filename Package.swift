@@ -4,7 +4,16 @@ import PackageDescription
 
 let package = Package(
     name: "NeuralNet-MNIST",
+    products: [
+        .library(
+            name: "NeuralNet-MNIST",
+            targets: ["NnMnist"]),
+    ],
     dependencies: [
-        .Package(url: "https://github.com/Swift-AI/NeuralNet.git", majorVersion: 0, minor: 3)
+    ],
+    targets: [
+        .target(
+            name: "NnMnist",
+            dependencies: []),
     ]
 )
