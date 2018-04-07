@@ -7,10 +7,14 @@
 //
 
 import Foundation
+import Gzip
 
 
 class MNISTManager {
-    
+
+    fileprivate static let defaultDirectory = "MNIST/"
+    let directory = "abc"
+
     /// All data files in the MNIST dataset.
     fileprivate enum File: String {
         case trainImages = "train-images-idx3-ubyte"
@@ -49,13 +53,19 @@ class MNISTManager {
     
     /// Initializes an instance of `MNISTManager` and caches the full dataset for quick access.
     ///
-    /// - Parameter directory: The filepath leading to the MNIST data directory.
-    /// Example: "/Users/Bob/Documents/NeuralNet-MNIST/MNIST/"
-    /// This is necessary because SwiftPM does not yet support bundles.
+    /// - Parameter directory: The directory URL where MNIST data will be stored.
     /// - Parameter pixelRange: A range [Float, Float] to scale image pixels.
     /// The desired range will depend on the activation functions used in the neural network.
     /// For example, a network with Logistic hidden activation might want to scale pixels to [-1, 1].
-    init(directory: String, pixelRange: (min: Float, max: Float), batchSize: Int) throws {
+    init(directory: URL, pixelRange: (min: Float, max: Float), batchSize: Int) throws {
+        // Download data
+        let downloader = Downloader(in: directory)
+        if !downloader.isDataLoaded() {
+            try downloader.downloadData()
+        }
+
+        try downloader.unzipData()
+
         // Cache training images
         trainImages = try MNISTManager.extractImages(from: .trainImages, directory: directory, range: pixelRange, batchSize: batchSize)
         // Cache training labels
@@ -68,19 +78,84 @@ class MNISTManager {
 
 }
 
+fileprivate class Downloader {
+
+    let parentDirectory: URL
+
+    static let allFiles = [MNISTManager.File.trainImages, MNISTManager.File.trainLabels,
+                    MNISTManager.File.validationImages, MNISTManager.File.validationLabels]
+        .map { t in t.rawValue }
+
+    static let datasetUrl = URL(string: "http://yann.lecun.com/exdb/mnist/")!
+    static let gzippedExtension = ".gz"
+
+    let unzippedFiles: [URL]
+
+    let gzippedFiles: [URL]
+
+    let remoteFileUrls: [URL]
+
+    init(in directory: URL) {
+        self.parentDirectory = directory
+
+        self.unzippedFiles = Downloader.allFiles
+            .map { t in
+                directory
+                .appendingPathComponent(t)
+            }
+
+        self.gzippedFiles = unzippedFiles.map { t in t.appendingPathExtension(Downloader.gzippedExtension) }
+
+        self.remoteFileUrls = Downloader.allFiles.map { t in
+            Downloader.datasetUrl.appendingPathComponent(t).appendingPathExtension(Downloader.gzippedExtension)
+        }
+    }
+
+    func isDataLoaded() -> Bool {
+        return gzippedFiles.all { fileUrl in
+            FileManager.default.fileExists(atPath: fileUrl.absoluteString)
+        }
+    }
+
+    func downloadData() throws {
+        for (remoteUrl, localUrl) in zip(remoteFileUrls, gzippedFiles) {
+            print("Downloading: \(remoteUrl.absoluteString)")
+            let data = try Data(contentsOf: remoteUrl)
+            try data.write(to: localUrl)
+        }
+        print("Complete")
+    }
+
+    func unzipData() throws {
+        for (gzippedUrl, unzippedUrl) in zip(gzippedFiles, unzippedFiles) {
+            try FileManager.default.removeItem(at: unzippedUrl)
+            print("Unpacking: \(gzippedUrl.absoluteString)")
+            let data = try Data(contentsOf: gzippedUrl)
+            let unzipped = try data.gunzipped()
+            try unzipped.write(to: unzippedUrl)
+        }
+    }
+
+    func cleanup() {
+        for unzippedUrl in unzippedFiles {
+            try? FileManager.default.removeItem(at: unzippedUrl)
+        }
+    }
+}
+
 
 // MARK: Data and file management
 
 private extension MNISTManager {
     
     /// Extracts image data from the given file, with all bytes scaled to the given range.
-    static func extractImages(from file: File, directory: String, range: (min: Float, max: Float), batchSize: Int) throws -> [[[Float]]] {
+    static func extractImages(from file: File, directory: URL, range: (min: Float, max: Float), batchSize: Int) throws -> [[[Float]]] {
         /// Scales a byte to the correct range.
         func scale(x: UInt8) -> Float {
             return (range.max - range.min) * Float(x) / 255 + range.min
         }
         // Read data from file and drop header data
-        let url = URL(fileURLWithPath: directory).appendingPathComponent(file.rawValue)
+        let url = directory.appendingPathComponent(file.rawValue)
         let data = try readFile(url: url).dropFirst(16)
         // Convert UInt8 array to Float array, scaled to the specified range
         let array = data.map{scale(x: $0)}
@@ -90,9 +165,9 @@ private extension MNISTManager {
     }
     
     /// Extracts label data from the given file.
-    static func extractLabels(from file: File, directory: String, batchSize: Int) throws -> [[[Float]]] {
+    static func extractLabels(from file: File, directory: URL, batchSize: Int) throws -> [[[Float]]] {
         // Read data from file and drop header data
-        let url = URL(fileURLWithPath: directory).appendingPathComponent(file.rawValue)
+        let url = directory.appendingPathComponent(file.rawValue)
         let data = try readFile(url: url).dropFirst(8)
         // Lookup one-hot encodings in our key
         return createBatches(data.map{labelEncodings[Int($0)]}, size: batchSize)
@@ -105,6 +180,7 @@ private extension MNISTManager {
     
     /// Groups the given set of data into batches of the specified size.
     private static func createBatches(_ set: [[Float]], size: Int) -> [[[Float]]] {
+        let set = set.shuffled()
         var output = [[[Float]]]()
         let numBatches = set.count / size
         for batchIdx in 0..<numBatches {

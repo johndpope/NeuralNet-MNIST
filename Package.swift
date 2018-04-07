@@ -10,10 +10,11 @@ let package = Package(
             targets: ["NnMnist"]),
     ],
     dependencies: [
+        .package(url: "https://github.com/1024jp/GzipSwift.git", .upToNextMajor(from: "4.0.0"))
     ],
     targets: [
         .target(
             name: "NnMnist",
-            dependencies: []),
+            dependencies: ["Gzip"]),
     ]
 )
