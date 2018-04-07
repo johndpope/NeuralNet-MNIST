@@ -10,7 +10,7 @@ import Foundation
 import Gzip
 
 
-class MNISTManager {
+public class MNISTManager {
 
     fileprivate static let defaultDirectory = "MNIST/"
     let directory = "abc"
@@ -26,10 +26,10 @@ class MNISTManager {
     
     // MARK: Data caches
     
-    let trainImages: [[[Float]]]
-    let trainLabels: [[[Float]]]
-    let validationImages: [[[Float]]]
-    let validationLabels: [[[Float]]]
+    public let trainImages: [[[Float]]]
+    public let trainLabels: [[[Float]]]
+    public let validationImages: [[[Float]]]
+    public let validationLabels: [[[Float]]]
     
     
     // MARK: One-hot encoding helper
@@ -57,7 +57,7 @@ class MNISTManager {
     /// - Parameter pixelRange: A range [Float, Float] to scale image pixels.
     /// The desired range will depend on the activation functions used in the neural network.
     /// For example, a network with Logistic hidden activation might want to scale pixels to [-1, 1].
-    init(directory: URL, pixelRange: (min: Float, max: Float), batchSize: Int) throws {
+    public init(directory: URL, pixelRange: (min: Float, max: Float), batchSize: Int) throws {
         // Download data
         let downloader = Downloader(in: directory)
         if !downloader.isDataLoaded() {
