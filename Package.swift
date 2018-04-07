@@ -16,5 +16,8 @@ let package = Package(
         .target(
             name: "NnMnist",
             dependencies: ["Gzip"]),
+        .testTarget(
+            name: "NnMnistTests",
+            dependencies: ["NnMnist"]),
     ]
 )

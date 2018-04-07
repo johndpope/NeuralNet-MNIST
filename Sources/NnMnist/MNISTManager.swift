@@ -117,7 +117,7 @@ fileprivate class Downloader {
 
     func isDataLoaded() -> Bool {
         return gzippedFiles.all { fileUrl in
-            FileManager.default.fileExists(atPath: fileUrl.absoluteString)
+            FileManager.default.fileExists(atPath: fileUrl.path)
         }
     }
 
@@ -156,16 +156,23 @@ private extension MNISTManager {
     static func extractImages(from file: File, directory: URL, range: (min: Float, max: Float), batchSize: Int, shuffle: Bool) throws -> [[[Float]]] {
         /// Scales a byte to the correct range.
         func scale(x: UInt8) -> Float {
-            return (range.max - range.min) * Float(x) / 255 + range.min
+            return (range.max - range.min) * Float(x) / 255.0 + range.min
         }
+
         // Read data from file and drop header data
         let url = directory.appendingPathComponent(file.rawValue)
-        let data = try readFile(url: url).dropFirst(16)
+        let data = try readFile(url: url).advanced(by: 16)
         // Convert UInt8 array to Float array, scaled to the specified range
-        let array = data.map{scale(x: $0)}
+        let array = data.lazy.map{scale(x: $0)}
         // Split array into segments of length 784 (1 image = 28x28 pixels)
-        return createBatches(stride(from: 0, to: array.count, by: 784).map{Array(array[$0..<min($0 + 784, array.count)])},
-                             size: batchSize, shuffle: shuffle)
+        return createBatches(
+            stride(from: 0, to: array.count, by: 784)
+                .map {
+                    Array(array[$0..<min($0 + 784, array.count)])
+                },
+            size: batchSize,
+            shuffle: shuffle
+        )
     }
     
     /// Extracts label data from the given file.
@@ -183,22 +190,39 @@ private extension MNISTManager {
     }
     
     /// Groups the given set of data into batches of the specified size.
-    private static func createBatches(_ set: [[Float]], size: Int, shuffle: Bool) -> [[[Float]]] {
-        let dataset: [[Float]]
+    private static func createBatches<T: Collection, U: Sequence>(_ set: T, size: Int, shuffle: Bool) -> [[U]] where T.Element == U, U.Element == Float, T.Index == Int {
         if shuffle {
-            dataset = set.shuffled()
+            return createBatchesShuffled(set, size: size)
         } else {
-            dataset = set
+            return createBatchesUnshuffled(set, size: size)
         }
-        var output = [[[Float]]]()
+    }
+
+    private static func createBatchesUnshuffled<T: Collection, U: Sequence>(_ set: T, size: Int) -> [[U]] where T.Element == U, U.Element == Float, T.Index == Int {
+        var output = [[U]]()
+        let numBatches = set.count / size
+        for batchIdx in 0..<numBatches {
+            output.append(
+                Array(
+                    set[batchIdx * size ..< (batchIdx+1) * size]
+                )
+            )
+        }
+        return output
+    }
+
+    private static func createBatchesShuffled<T: Collection, U: Sequence>(_ set: T, size: Int) -> [[U]] where T.Element == U, U.Element == Float {
+        var dataset: [U] = Array(set)
+        dataset.shuffle()
+
+        var output = [[U]]()
         let numBatches = dataset.count / size
         for batchIdx in 0..<numBatches {
-            var batch = [[Float]]()
-            for item in 0..<size {
-                let idx = batchIdx * size + item
-                batch.append(dataset[idx])
-            }
-            output.append(batch)
+            output.append(
+                Array(
+                    dataset[batchIdx * size ..< batchIdx * (size+1)]
+                )
+            )
         }
         return output
     }
