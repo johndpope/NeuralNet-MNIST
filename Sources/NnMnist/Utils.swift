@@ -9,7 +9,7 @@ import Foundation
 
 extension Sequence where Element == Bool {
     fileprivate func all() -> Bool {
-        return reduce(false) { r, v in r && v }
+        return reduce(true) { r, v in r && v }
     }
 
     fileprivate func any() -> Bool {

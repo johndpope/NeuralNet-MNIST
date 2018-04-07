@@ -13,7 +13,6 @@ import Gzip
 public class MNISTManager {
 
     fileprivate static let defaultDirectory = "MNIST/"
-    let directory = "abc"
 
     /// All data files in the MNIST dataset.
     fileprivate enum File: String {
@@ -30,7 +29,8 @@ public class MNISTManager {
     public let trainLabels: [[[Float]]]
     public let validationImages: [[[Float]]]
     public let validationLabels: [[[Float]]]
-    
+
+    private let downloader: Downloader
     
     // MARK: One-hot encoding helper
     // Note: This is easy, fast and convenient since MNIST only has 10 classifications
@@ -57,9 +57,9 @@ public class MNISTManager {
     /// - Parameter pixelRange: A range [Float, Float] to scale image pixels.
     /// The desired range will depend on the activation functions used in the neural network.
     /// For example, a network with Logistic hidden activation might want to scale pixels to [-1, 1].
-    public init(directory: URL, pixelRange: (min: Float, max: Float), batchSize: Int) throws {
+    public init(directory: URL, pixelRange: (min: Float, max: Float), batchSize: Int, shuffle: Bool = false) throws {
         // Download data
-        let downloader = Downloader(in: directory)
+        downloader = Downloader(in: directory)
         if !downloader.isDataLoaded() {
             try downloader.downloadData()
         }
@@ -67,13 +67,17 @@ public class MNISTManager {
         try downloader.unzipData()
 
         // Cache training images
-        trainImages = try MNISTManager.extractImages(from: .trainImages, directory: directory, range: pixelRange, batchSize: batchSize)
+        trainImages = try MNISTManager.extractImages(from: .trainImages, directory: directory, range: pixelRange, batchSize: batchSize, shuffle: shuffle)
         // Cache training labels
-        trainLabels = try MNISTManager.extractLabels(from: .trainLabels, directory: directory, batchSize: batchSize)
+        trainLabels = try MNISTManager.extractLabels(from: .trainLabels, directory: directory, batchSize: batchSize, shuffle: shuffle)
         // Cache validation images
-        validationImages = try MNISTManager.extractImages(from: .validationImages, directory: directory, range: pixelRange, batchSize: batchSize)
+        validationImages = try MNISTManager.extractImages(from: .validationImages, directory: directory, range: pixelRange, batchSize: batchSize, shuffle: shuffle)
         // Cache validation labels
-        validationLabels = try MNISTManager.extractLabels(from: .validationLabels, directory: directory, batchSize: batchSize)
+        validationLabels = try MNISTManager.extractLabels(from: .validationLabels, directory: directory, batchSize: batchSize, shuffle: shuffle)
+    }
+
+    deinit {
+        downloader.cleanup()
     }
 
 }
@@ -149,7 +153,7 @@ fileprivate class Downloader {
 private extension MNISTManager {
     
     /// Extracts image data from the given file, with all bytes scaled to the given range.
-    static func extractImages(from file: File, directory: URL, range: (min: Float, max: Float), batchSize: Int) throws -> [[[Float]]] {
+    static func extractImages(from file: File, directory: URL, range: (min: Float, max: Float), batchSize: Int, shuffle: Bool) throws -> [[[Float]]] {
         /// Scales a byte to the correct range.
         func scale(x: UInt8) -> Float {
             return (range.max - range.min) * Float(x) / 255 + range.min
@@ -161,16 +165,16 @@ private extension MNISTManager {
         let array = data.map{scale(x: $0)}
         // Split array into segments of length 784 (1 image = 28x28 pixels)
         return createBatches(stride(from: 0, to: array.count, by: 784).map{Array(array[$0..<min($0 + 784, array.count)])},
-                             size: batchSize)
+                             size: batchSize, shuffle: shuffle)
     }
     
     /// Extracts label data from the given file.
-    static func extractLabels(from file: File, directory: URL, batchSize: Int) throws -> [[[Float]]] {
+    static func extractLabels(from file: File, directory: URL, batchSize: Int, shuffle: Bool) throws -> [[[Float]]] {
         // Read data from file and drop header data
         let url = directory.appendingPathComponent(file.rawValue)
         let data = try readFile(url: url).dropFirst(8)
         // Lookup one-hot encodings in our key
-        return createBatches(data.map{labelEncodings[Int($0)]}, size: batchSize)
+        return createBatches(data.map{labelEncodings[Int($0)]}, size: batchSize, shuffle: shuffle)
     }
     
     /// Attempts to read the file with the given path, and returns its raw data.
@@ -179,15 +183,20 @@ private extension MNISTManager {
     }
     
     /// Groups the given set of data into batches of the specified size.
-    private static func createBatches(_ set: [[Float]], size: Int) -> [[[Float]]] {
-        let set = set.shuffled()
+    private static func createBatches(_ set: [[Float]], size: Int, shuffle: Bool) -> [[[Float]]] {
+        let dataset: [[Float]]
+        if shuffle {
+            dataset = set.shuffled()
+        } else {
+            dataset = set
+        }
         var output = [[[Float]]]()
-        let numBatches = set.count / size
+        let numBatches = dataset.count / size
         for batchIdx in 0..<numBatches {
             var batch = [[Float]]()
             for item in 0..<size {
                 let idx = batchIdx * size + item
-                batch.append(set[idx])
+                batch.append(dataset[idx])
             }
             output.append(batch)
         }
