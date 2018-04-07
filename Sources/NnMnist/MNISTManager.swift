@@ -128,7 +128,7 @@ fileprivate class Downloader {
 
     func unzipData() throws {
         for (gzippedUrl, unzippedUrl) in zip(gzippedFiles, unzippedFiles) {
-            try FileManager.default.removeItem(at: unzippedUrl)
+            try? FileManager.default.removeItem(at: unzippedUrl)
             print("Unpacking: \(gzippedUrl.absoluteString)")
             let data = try Data(contentsOf: gzippedUrl)
             let unzipped = try data.gunzipped()
