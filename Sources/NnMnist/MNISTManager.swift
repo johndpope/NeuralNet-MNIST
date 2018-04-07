@@ -87,7 +87,7 @@ fileprivate class Downloader {
         .map { t in t.rawValue }
 
     static let datasetUrl = URL(string: "http://yann.lecun.com/exdb/mnist/")!
-    static let gzippedExtension = ".gz"
+    static let gzippedExtension = "gz"
 
     let unzippedFiles: [URL]
 
