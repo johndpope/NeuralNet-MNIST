@@ -163,13 +163,17 @@ private extension MNISTManager {
         let url = directory.appendingPathComponent(file.rawValue)
         let data = try readFile(url: url).advanced(by: 16)
         // Convert UInt8 array to Float array, scaled to the specified range
-        let array = data.lazy.map{scale(x: $0)}
+        let array = data.lazy.map { scale(x: $0) }
         // Split array into segments of length 784 (1 image = 28x28 pixels)
+        var resultArray: [[Float]] = Array()
+        resultArray.reserveCapacity(784)
+
+        for i in stride(from: 0, to: array.count, by: 784) {
+            resultArray.append(Array(array[i..<min(i + 784, array.count)]))
+        }
+
         return createBatches(
-            stride(from: 0, to: array.count, by: 784)
-                .map {
-                    Array(array[$0..<min($0 + 784, array.count)])
-                },
+            resultArray,
             size: batchSize,
             shuffle: shuffle
         )
